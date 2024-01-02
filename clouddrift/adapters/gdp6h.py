@@ -19,7 +19,7 @@ import warnings
 import xarray as xr
 
 
-GDP_DATA_URL = "https://www.aoml.noaa.gov/ftp/pub/phod/lumpkin/netcdf/"
+GDP_DATA_URL = "https://www.aoml.noaa.gov/ftp/pub/phod/buoydata/6h//"
 GDP_TMP_PATH = os.path.join(tempfile.gettempdir(), "clouddrift", "gdp6h")
 GDP_DATA = [
     "lon",
@@ -62,58 +62,67 @@ def download(
 
     print(f"Downloading GDP 6-hourly data to {tmp_path}...")
 
-    # Create a temporary directory if doesn't already exists.
+    # Create a temporary directory if doesn't already exist.
     os.makedirs(tmp_path, exist_ok=True)
 
-    pattern = "drifter_[0-9]*.nc"
+    pattern = "drifter_6h_[0-9]*.nc"
     directory_list = [
-        "buoydata_1_5000",
-        "buoydata_5001_10000",
-        "buoydata_10001_15000",
-        "buoydata_15001_oct22",
+        "netcdf_1_5000",
+        "netcdf_5001_10000",
+        "netcdf_10001_15000",
+        "netcdf_15001_current",
     ]
 
-    # retrieve all drifter ID numbers
     if drifter_ids is None:
-        urlpath = urllib.request.urlopen(url)
-        string = urlpath.read().decode("utf-8")
         drifter_urls = []
+        # retrieve all drifter ID numbers
         for dir in directory_list:
             urlpath = urllib.request.urlopen(os.path.join(url, dir))
             string = urlpath.read().decode("utf-8")
             filelist = list(set(re.compile(pattern).findall(string)))
             drifter_urls += [os.path.join(url, dir, f) for f in filelist]
 
-    # retrieve only a subset of n_random_id trajectories
-    if n_random_id:
-        if n_random_id > len(drifter_urls):
-            warnings.warn(
-                f"Retrieving all listed trajectories because {n_random_id} is larger than the {len(drifter_ids)} listed trajectories."
-            )
-        else:
-            rng = np.random.RandomState(42)
-            drifter_urls = rng.choice(drifter_urls, n_random_id, replace=False)
+        # retrieve only a subset of n_random_id trajectories
+        if n_random_id:
+            if n_random_id > len(drifter_urls):
+                warnings.warn(
+                    f"Retrieving all listed trajectories because {n_random_id} is larger than the {len(drifter_urls)} listed trajectories."
+                )
+            else:
+                rng = np.random.RandomState(42)
+                drifter_urls = rng.choice(drifter_urls, n_random_id, replace=False)
 
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        # Asynchronously download individual netCDF files
-        list(
-            tqdm(
-                executor.map(
-                    gdp.fetch_netcdf,
-                    drifter_urls,
-                    [os.path.join(tmp_path, os.path.basename(f)) for f in drifter_urls],
-                ),
-                total=len(drifter_urls),
-                desc="Downloading files",
-                ncols=80,
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # Asynchronously download individual netCDF files
+            list(
+                tqdm(
+                    executor.map(
+                        gdp.fetch_netcdf,
+                        drifter_urls,
+                        [os.path.join(tmp_path, os.path.basename(f)) for f in drifter_urls],
+                    ),
+                    total=len(drifter_urls),
+                    desc="Downloading files",
+                    ncols=80,
+                )
             )
-        )
+
+        drifter_ids = [
+            int(os.path.basename(f).split("_")[-1].split(".")[0]) for f in drifter_urls
+        ]
+    else:
+        # retrieve only a subset of n_random_id trajectories
+        if n_random_id:
+            if n_random_id > len(drifter_ids):
+                warnings.warn(
+                    f"Retrieving all listed trajectories because {n_random_id} is larger than the {len(drifter_ids)} listed trajectories."
+                )
+            else:
+                rng = np.random.RandomState(42)
+                drifter_ids = rng.choice(drifter_ids, n_random_id, replace=False)
 
     # Download the metadata so we can order the drifter IDs by end date.
     gdp_metadata = gdp.get_gdp_metadata()
-    drifter_ids = [
-        int(os.path.basename(f).split("_")[1].split(".")[0]) for f in drifter_urls
-    ]
 
     return gdp.order_by_date(gdp_metadata, drifter_ids)
 
@@ -392,8 +401,8 @@ def preprocess(index: int, **kwargs) -> xr.Dataset:
 
     # global attributes
     attrs = {
-        "title": "Global Drifter Program hourly drifting buoy collection",
-        "history": f"version {gdp.GDP_VERSION}. Metadata from dirall.dat and deplog.dat",
+        "title": "Global Drifter Program six-hourly drifting buoy collection",
+        "history": "Downloaded from https://www.aoml.noaa.gov/ftp/pub/phod/buoydata/6h/ and post-processed into a ragged-array Xarray Dataset by CloudDrift",
         "Conventions": "CF-1.6",
         "date_created": datetime.now().isoformat(),
         "publisher_name": "GDP Drifter DAC",
