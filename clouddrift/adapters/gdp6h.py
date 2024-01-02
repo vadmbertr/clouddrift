@@ -501,6 +501,6 @@ def to_raggedarray(
         name_meta=gdp.GDP_METADATA,
         name_data=GDP_DATA,
         rowsize_func=gdp.rowsize,
-        filename_pattern="drifter_{id}.nc",
+        filename_pattern="drifter_6h_{id}.nc",
         tmp_path=tmp_path,
     )
